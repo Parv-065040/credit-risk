@@ -6,25 +6,45 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 
-# ---------------- CONFIG ---------------- #
+# =========================================================
+# PAGE CONFIG
+# =========================================================
 st.set_page_config(
     page_title="Credit Risk Intelligence",
     page_icon="🏦",
     layout="wide"
 )
 
-# ---------------- LOAD MODEL ---------------- #
+# =========================================================
+# SAFE FILE LOADING (FIXES YOUR ERROR)
+# =========================================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-model = pickle.load(open(os.path.join(BASE_DIR, "model.pkl"), "rb"))
-scaler = pickle.load(open(os.path.join(BASE_DIR, "scaler.pkl"), "rb"))
+MODEL_PATH = os.path.join(BASE_DIR, "model.pkl")
+SCALER_PATH = os.path.join(BASE_DIR, "scaler.pkl")
 
-# ---------------- HEADER ---------------- #
+if not os.path.exists(MODEL_PATH):
+    st.error("❌ model.pkl not found. Please upload it to the GitHub repo.")
+    st.stop()
+
+if not os.path.exists(SCALER_PATH):
+    st.error("❌ scaler.pkl not found. Please upload it to the GitHub repo.")
+    st.stop()
+
+with open(MODEL_PATH, "rb") as f:
+    model = pickle.load(f)
+
+with open(SCALER_PATH, "rb") as f:
+    scaler = pickle.load(f)
+
+# =========================================================
+# HEADER
+# =========================================================
 st.markdown(
     """
-    <h1 style='text-align: center;'>🏦 Credit Risk Intelligence Dashboard</h1>
-    <p style='text-align: center; font-size:18px;'>
-    AI-powered loan risk assessment using Machine Learning
+    <h1 style='text-align:center;'>🏦 Credit Risk Intelligence Dashboard</h1>
+    <p style='text-align:center;font-size:18px;'>
+    Machine Learning powered real-time credit risk assessment
     </p>
     """,
     unsafe_allow_html=True
@@ -32,21 +52,28 @@ st.markdown(
 
 st.divider()
 
-# ---------------- SIDEBAR ---------------- #
-st.sidebar.header("🔧 Applicant Information")
+# =========================================================
+# SIDEBAR INPUTS
+# =========================================================
+st.sidebar.header("🧾 Applicant Details")
 
 age = st.sidebar.slider("Age", 18, 75, 30)
 credit_amount = st.sidebar.number_input("Credit Amount", 500, 100000, 5000, step=500)
-duration = st.sidebar.slider("Loan Duration (months)", 6, 72, 24)
+duration = st.sidebar.slider("Loan Duration (Months)", 6, 72, 24)
 installment_rate = st.sidebar.selectbox("Installment Rate", [1, 2, 3, 4])
 existing_credits = st.sidebar.selectbox("Existing Credits", [0, 1, 2, 3])
 
-risk_threshold = st.sidebar.slider(
+threshold = st.sidebar.slider(
     "⚖️ Risk Decision Threshold",
-    0.1, 0.9, 0.5, 0.05
+    min_value=0.1,
+    max_value=0.9,
+    value=0.5,
+    step=0.05
 )
 
-# ---------------- INPUT DATA ---------------- #
+# =========================================================
+# INPUT DATA
+# =========================================================
 input_df = pd.DataFrame({
     "Age": [age],
     "CreditAmount": [credit_amount],
@@ -57,36 +84,38 @@ input_df = pd.DataFrame({
 
 input_scaled = scaler.transform(input_df)
 
-# ---------------- PREDICTION ---------------- #
-probability = model.predict_proba(input_scaled)[0][1]
-prediction = int(probability >= risk_threshold)
+# =========================================================
+# PREDICTION
+# =========================================================
+risk_probability = model.predict_proba(input_scaled)[0][1]
+risk_prediction = int(risk_probability >= threshold)
 
-# ---------------- LAYOUT ---------------- #
+# =========================================================
+# MAIN LAYOUT
+# =========================================================
 col1, col2 = st.columns([1, 1.3])
 
-# ---------------- RESULT CARD ---------------- #
+# ---------------- RESULT CARD ----------------
 with col1:
     st.subheader("📌 Credit Decision")
 
-    if prediction == 1:
+    if risk_prediction == 1:
         st.error("❌ HIGH CREDIT RISK")
     else:
         st.success("✅ LOW CREDIT RISK")
 
     st.metric(
-        label="Risk Probability",
-        value=f"{probability:.2%}"
+        label="Default Risk Probability",
+        value=f"{risk_probability:.2%}"
     )
 
-    st.caption(
-        f"Decision threshold set at **{risk_threshold:.2f}**"
-    )
+    st.caption(f"Decision threshold = **{threshold:.2f}**")
 
-# ---------------- GAUGE CHART ---------------- #
+# ---------------- GAUGE CHART ----------------
 with col2:
     fig_gauge = go.Figure(go.Indicator(
         mode="gauge+number",
-        value=probability * 100,
+        value=risk_probability * 100,
         number={"suffix": "%"},
         title={"text": "Credit Risk Probability"},
         gauge={
@@ -99,8 +128,7 @@ with col2:
             ],
             "threshold": {
                 "line": {"color": "black", "width": 4},
-                "thickness": 0.75,
-                "value": risk_threshold * 100
+                "value": threshold * 100
             }
         }
     ))
@@ -109,8 +137,10 @@ with col2:
 
 st.divider()
 
-# ---------------- FEATURE CONTRIBUTION (SIMULATED) ---------------- #
-st.subheader("📊 Input Feature Overview")
+# =========================================================
+# FEATURE OVERVIEW
+# =========================================================
+st.subheader("📊 Applicant Profile Snapshot")
 
 feature_df = input_df.T.reset_index()
 feature_df.columns = ["Feature", "Value"]
@@ -121,24 +151,25 @@ fig_bar = px.bar(
     y="Feature",
     orientation="h",
     color="Feature",
-    title="Applicant Profile Snapshot"
+    title="Input Feature Distribution"
 )
 
 st.plotly_chart(fig_bar, use_container_width=True)
 
-# ---------------- INSIGHTS ---------------- #
-st.subheader("🧠 Model Insights")
+# =========================================================
+# INSIGHTS SECTION
+# =========================================================
+st.subheader("🧠 Model Interpretation")
 
 st.info(
     """
-    **How to interpret this dashboard:**
-    - The model estimates the probability of credit default.
+    - This model estimates the probability of credit default.
     - Threshold can be adjusted based on risk appetite.
-    - Lower thresholds increase approvals but raise risk.
-    - Higher thresholds reduce defaults but reject more applicants.
+    - Lower threshold → more approvals, higher risk.
+    - Higher threshold → fewer approvals, lower risk.
     """
 )
 
 st.success(
-    "This application simulates how banks deploy ML models for real-time credit decisions."
+    "This dashboard demonstrates how ML models are deployed in real banking decision systems."
 )
